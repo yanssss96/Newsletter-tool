@@ -1,0 +1,7 @@
+[
+  { "email": "alice@mailinator.com", "prenom": "Alice" },
+  { "email": "bob@mailinator.com", "prenom": "Bob" },
+  { "email": "charlie@mailinator.com", "prenom": "Charlie" },
+  { "email": "diana@mailinator.com", "prenom": "Diana" },
+  { "email": "evan@mailinator.com", "prenom": "Evan" }
+]

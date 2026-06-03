@@ -1,0 +1,17 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+iframe {
+  display: block !important;
+  height: calc(100vh - 60px) !important;
+  min-height: calc(100vh - 60px) !important;
+}
