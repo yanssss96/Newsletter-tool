@@ -1,7 +1,11 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import EditorComponent from '@/components/Editor';
+import dynamic from 'next/dynamic';
+
+const EditorComponent = dynamic(() => import('@/components/Editor'), {
+  ssr: false,
+});
 
 export default function EditorPage() {
   const router = useRouter();
