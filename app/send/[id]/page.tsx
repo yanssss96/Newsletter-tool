@@ -11,10 +11,18 @@ export default function SendPage() {
   const router = useRouter();
   const [newsletter, setNewsletter] = useState<Newsletter | null>(null);
   const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
   const [testEmail, setTestEmail] = useState('');
   const [testError, setTestError] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+
+  const [newEmail, setNewEmail] = useState('');
+  const [newPrenom, setNewPrenom] = useState('');
+  const [addError, setAddError] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState<'test' | 'all'>('all');
   const [modalEmail, setModalEmail] = useState('');
@@ -23,15 +31,84 @@ export default function SendPage() {
     fetch('/api/newsletters').then(r => r.json()).then((list: Newsletter[]) => {
       setNewsletter(list.find(n => n.id === id) || null);
     });
-    fetch('/api/recipients').then(r => r.json()).then(setRecipients);
+    loadRecipients();
   }, [id]);
 
+  const loadRecipients = () => {
+    fetch('/api/recipients').then(r => r.json()).then((list: Recipient[]) => {
+      setRecipients(list);
+      setSelected(new Set(list.map(r => r.email)));
+    });
+  };
+
+  const toggleSelect = (email: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(email)) next.delete(email);
+      else next.add(email);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selected.size === recipients.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(recipients.map(r => r.email)));
+    }
+  };
+
+  const handleAddRecipient = async () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!newEmail || !emailRegex.test(newEmail)) {
+      setAddError('Veuillez saisir un email valide');
+      return;
+    }
+    if (!newPrenom.trim()) {
+      setAddError('Veuillez saisir un prénom');
+      return;
+    }
+
+    const res = await fetch('/api/recipients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: newEmail, prenom: newPrenom }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      setAddError(data.error || 'Erreur lors de l\'ajout');
+      return;
+    }
+
+    setAddError('');
+    setNewEmail('');
+    setNewPrenom('');
+    setShowAddForm(false);
+    const data = await res.json();
+    setRecipients(prev => [...prev, data]);
+    setSelected(prev => new Set([...prev, data.email]));
+  };
+
+  const handleRemoveRecipient = async (email: string) => {
+    await fetch(`/api/recipients?email=${encodeURIComponent(email)}`, {
+      method: 'DELETE',
+    });
+    setRecipients(prev => prev.filter(r => r.email !== email));
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.delete(email);
+      return next;
+    });
+  };
+
   const handleSendAll = async () => {
+    if (selected.size === 0) return;
     setSending(true);
     await fetch('/api/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ newsletterId: id }),
+      body: JSON.stringify({ newsletterId: id, recipientEmails: Array.from(selected) }),
     });
     setSending(false);
     setSent(true);
@@ -59,10 +136,14 @@ export default function SendPage() {
   const COLORS: Record<string, string> = {
     A:'#6366f1', B:'#8b5cf6', C:'#ec4899', D:'#10b981', E:'#f59e0b',
   };
+  const getColor = (letter: string) => COLORS[letter] || '#6366f1';
 
   const FIREWORK_COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f472b6','#a78bfa'];
 
   if (!newsletter) return null;
+
+  const selectedCount = selected.size;
+  const allSelected = recipients.length > 0 && selectedCount === recipients.length;
 
   return (
     <>
@@ -188,6 +269,57 @@ export default function SendPage() {
           25% { transform: translateX(-6px); }
           75% { transform: translateX(6px); }
         }
+
+        .recipient-row {
+          display: flex; align-items: center; gap: 12px;
+          padding: 10px 0;
+          border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .recipient-row:last-child { border-bottom: none; }
+
+        .checkbox {
+          width: 20px; height: 20px;
+          border-radius: 6px;
+          border: 2px solid rgba(255,255,255,0.2);
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer;
+          flex-shrink: 0;
+          transition: all 0.15s;
+          font-size: 12px;
+        }
+        .checkbox.checked {
+          background: linear-gradient(135deg, #6366f1, #8b5cf6);
+          border-color: transparent;
+        }
+
+        .remove-btn {
+          width: 26px; height: 26px;
+          border-radius: 7px;
+          background: rgba(248,113,113,0.1);
+          border: 1px solid rgba(248,113,113,0.2);
+          color: #f87171;
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer;
+          font-size: 13px;
+          flex-shrink: 0;
+          transition: all 0.15s;
+        }
+        .remove-btn:hover { background: rgba(248,113,113,0.2); }
+
+        .add-btn {
+          background: rgba(99,102,241,0.1);
+          border: 1px dashed rgba(99,102,241,0.4);
+          color: #818cf8;
+          padding: 10px;
+          border-radius: 10px;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 600;
+          width: 100%;
+          margin-top: 10px;
+          transition: all 0.2s;
+        }
+        .add-btn:hover { background: rgba(99,102,241,0.18); }
       `}</style>
 
       {/* MODAL */}
@@ -242,7 +374,7 @@ export default function SendPage() {
             <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, lineHeight: 1.6 }}>
               {modalType === 'test'
                 ? <>Email envoyé avec succès à <span style={{ color: '#818cf8', fontWeight: 600 }}>{modalEmail}</span></>
-                : <>Ta newsletter a été envoyée à <span style={{ color: '#818cf8', fontWeight: 600 }}>{recipients.length} destinataire{recipients.length > 1 ? 's' : ''}</span> avec succès !</>
+                : <>Ta newsletter a été envoyée à <span style={{ color: '#818cf8', fontWeight: 600 }}>{selectedCount} destinataire{selectedCount > 1 ? 's' : ''}</span> avec succès !</>
               }
             </p>
 
@@ -280,21 +412,84 @@ export default function SendPage() {
 
           {/* Recipients */}
           <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 24, marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.3)', letterSpacing: 1 }}>DESTINATAIRES</span>
               <span style={{ background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.3)', color: '#818cf8', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>
-                {recipients.length} contacts
+                {selectedCount} / {recipients.length} sélectionné{selectedCount > 1 ? 's' : ''}
               </span>
             </div>
-            {recipients.map((r) => (
-              <div key={r.email} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ width: 34, height: 34, borderRadius: '50%', background: COLORS[r.prenom[0]] || '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
-                  {r.prenom[0]}
+
+            {/* Select all */}
+            {recipients.length > 0 && (
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, marginBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer' }}
+                onClick={toggleAll}
+              >
+                <div className={`checkbox ${allSelected ? 'checked' : ''}`}>
+                  {allSelected && '✓'}
                 </div>
-                <span style={{ flex: 1, fontWeight: 500, fontSize: 14 }}>{r.prenom}</span>
-                <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>{r.email}</span>
+                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>
+                  {allSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
+                </span>
               </div>
-            ))}
+            )}
+
+            {recipients.map((r) => {
+              const isSelected = selected.has(r.email);
+              return (
+                <div key={r.email} className="recipient-row">
+                  <div
+                    className={`checkbox ${isSelected ? 'checked' : ''}`}
+                    onClick={() => toggleSelect(r.email)}
+                  >
+                    {isSelected && '✓'}
+                  </div>
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: getColor(r.prenom[0]), display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, flexShrink: 0, opacity: isSelected ? 1 : 0.4 }}>
+                    {r.prenom[0]}
+                  </div>
+                  <span style={{ flex: 1, fontWeight: 500, fontSize: 14, opacity: isSelected ? 1 : 0.4 }}>{r.prenom}</span>
+                  <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, opacity: isSelected ? 1 : 0.4 }}>{r.email}</span>
+                  <div className="remove-btn" onClick={() => handleRemoveRecipient(r.email)}>
+                    ✕
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Add recipient form */}
+            {showAddForm ? (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <input
+                    type="text"
+                    placeholder="Prénom"
+                    value={newPrenom}
+                    onChange={e => { setNewPrenom(e.target.value); setAddError(''); }}
+                    style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '9px 12px', color: '#fff', fontSize: 13, outline: 'none' }}
+                  />
+                  <input
+                    type="email"
+                    placeholder="email@exemple.com"
+                    value={newEmail}
+                    onChange={e => { setNewEmail(e.target.value); setAddError(''); }}
+                    style={{ flex: 2, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '9px 12px', color: '#fff', fontSize: 13, outline: 'none' }}
+                  />
+                </div>
+                {addError && <p className="error-msg">⚠️ {addError}</p>}
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <button onClick={handleAddRecipient} style={{ flex: 1, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', color: '#fff', padding: '9px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+                    ✓ Ajouter
+                  </button>
+                  <button onClick={() => { setShowAddForm(false); setAddError(''); setNewEmail(''); setNewPrenom(''); }} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontSize: 13 }}>
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button className="add-btn" onClick={() => setShowAddForm(true)}>
+                + Ajouter un destinataire
+              </button>
+            )}
           </div>
 
           {/* Test email */}
@@ -313,17 +508,11 @@ export default function SendPage() {
                     border: `1px solid ${testError ? 'rgba(248,113,113,0.5)' : 'rgba(255,255,255,0.1)'}`,
                     borderRadius: 10, padding: '10px 14px',
                     color: '#fff', fontSize: 14, outline: 'none',
-                    transition: 'border-color 0.2s',
                   }}
                 />
-                {testError && (
-                  <p className="error-msg">⚠️ {testError}</p>
-                )}
+                {testError && <p className="error-msg">⚠️ {testError}</p>}
               </div>
-              <button
-                onClick={handleTest}
-                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '10px 16px', borderRadius: 10, cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap', alignSelf: 'flex-start' }}
-              >
+              <button onClick={handleTest} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '10px 16px', borderRadius: 10, cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
                 ⚡ Envoyer
               </button>
             </div>
@@ -332,26 +521,30 @@ export default function SendPage() {
           {/* Send button */}
           <button
             onClick={handleSendAll}
-            disabled={sending || sent}
+            disabled={sending || sent || selectedCount === 0}
             style={{
               width: '100%', padding: '18px',
               borderRadius: 14, border: 'none',
-              cursor: sending || sent ? 'not-allowed' : 'pointer',
+              cursor: (sending || sent || selectedCount === 0) ? 'not-allowed' : 'pointer',
               fontSize: 16, fontWeight: 700,
               background: sent
                 ? 'linear-gradient(135deg, #10b981, #059669)'
+                : selectedCount === 0
+                ? 'rgba(255,255,255,0.08)'
                 : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              color: '#fff',
+              color: selectedCount === 0 && !sent ? 'rgba(255,255,255,0.3)' : '#fff',
               boxShadow: sent
                 ? '0 8px 30px rgba(16,185,129,0.4)'
-                : '0 8px 30px rgba(99,102,241,0.4)',
+                : selectedCount === 0 ? 'none' : '0 8px 30px rgba(99,102,241,0.4)',
               opacity: sending ? 0.7 : 1,
               transition: 'all 0.3s',
             }}
           >
             {sent ? '✓ Envoyé avec succès !'
               : sending ? 'Envoi en cours...'
-              : `🚀 Envoyer à tous — ${recipients.length} destinataires`}
+              : selectedCount === 0 ? 'Sélectionne au moins un destinataire'
+              : selectedCount === 1 ? `🚀 Envoyer à 1 destinataire`
+              : `🚀 Envoyer à ${selectedCount} destinataires`}
           </button>
 
         </div>
